@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Power BI Copilot — Ask your data, get DAX back</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0E1420;
+    --surface:#141B2B;
+    --surface-alt:#1B2438;
+    --surface-raised:#212C43;
+    --line: rgba(237,239,244,0.09);
+    --line-strong: rgba(237,239,244,0.16);
+    --text:#EDEFF4;
+    --muted:#8B93A7;
+    --muted-dim:#5C6478;
+    --yellow:#F2C811;
+    --teal:#34C7B5;
+    --coral:#FF6B5E;
+    --display: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--body);
+    font-size:16px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  ::selection{ background:var(--yellow); color:#0E1420; }
+
+  a{ color:inherit; text-decoration:none; }
+
+  /* ---------- Background grid, evokes a report canvas ---------- */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    opacity:0.35;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  /* ---------- Layout shell ---------- */
+  .shell{
+    display:grid;
+    grid-template-columns: 280px 1fr;
+    max-width:1440px;
+    margin:0 auto;
+    position:relative;
+    z-index:1;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    position:sticky; top:0;
+    height:100vh;
+    overflow-y:auto;
+    padding:28px 22px 40px;
+    border-right:1px solid var(--line);
+    display:flex; flex-direction:column;
+    gap:28px;
+  }
+  .sidebar::-webkit-scrollbar{ width:6px; }
+  .sidebar::-webkit-scrollbar-thumb{ background:var(--line-strong); border-radius:4px; }
+
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--display); font-weight:700; font-size:15px;
+    letter-spacing:0.02em;
+    padding-bottom:20px;
+    border-bottom:1px solid var(--line);
+  }
+  .brand-mark{
+    width:30px; height:30px; border-radius:7px;
+    background: linear-gradient(135deg, var(--yellow), #C9A20E);
+    display:flex; align-items:center; justify-content:center;
+    color:#0E1420; font-weight:700; font-size:13px;
+    flex-shrink:0;
+  }
+  .brand small{ display:block; font-family:var(--body); font-weight:500; color:var(--muted); font-size:11px; margin-top:2px; letter-spacing:0.03em;}
+
+  .nav-group-label{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--muted-dim); margin-bottom:10px;
+  }
+
+  .navlist{ list-style:none; display:flex; flex-direction:column; }
+  .navlist a{
+    display:flex; gap:10px; align-items:baseline;
+    padding:7px 8px; border-radius:6px;
+    font-size:13.5px; color:var(--muted);
+    transition:background .15s ease, color .15s ease;
+    border-left:2px solid transparent;
+  }
+  .navlist a .idx{ font-family:var(--mono); font-size:11px; color:var(--muted-dim); width:18px; flex-shrink:0; }
+  .navlist a:hover{ color:var(--text); background:var(--surface-alt); }
+  .navlist a.active{ color:var(--yellow); background:var(--surface-alt); border-left-color:var(--yellow); }
+  .navlist a.active .idx{ color:var(--yellow); }
+
+  .sidebar-cta{
+    margin-top:auto;
+    padding-top:20px; border-top:1px solid var(--line);
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:10px 16px; border-radius:8px; font-size:13.5px; font-weight:600;
+    font-family:var(--body);
+    cursor:pointer; border:1px solid transparent; transition:transform .15s ease, opacity .15s ease;
+  }
+  .btn:hover{ transform:translateY(-1px); }
+  .btn-primary{ background:var(--yellow); color:#0E1420; }
+  .btn-ghost{ background:transparent; border-color:var(--line-strong); color:var(--text); }
+
+  /* ---------- Main ---------- */
+  main{ min-width:0; }
+  section{ padding:96px 64px; border-bottom:1px solid var(--line); position:relative; }
+  section:last-of-type{ border-bottom:none; }
+
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; color:var(--yellow);
+    letter-spacing:0.14em; text-transform:uppercase;
+    display:flex; align-items:center; gap:10px; margin-bottom:18px;
+  }
+  .eyebrow .num{ color:var(--muted-dim); }
+  .eyebrow::after{ content:""; height:1px; flex:1; background:var(--line-strong); }
+
+  h1,h2,h3{ font-family:var(--display); font-weight:600; letter-spacing:-0.01em; }
+  h2{ font-size:34px; margin-bottom:22px; color:var(--text); }
+  h3{ font-size:18px; margin-bottom:10px; color:var(--text); }
+  p{ color:var(--muted); max-width:74ch; }
+  p + p { margin-top:12px; }
+  strong{ color:var(--text); font-weight:600; }
+
+  .lede{ font-size:18px; max-width:66ch; }
+
+  /* ---------- Hero ---------- */
+  .hero{ padding-top:64px; padding-bottom:80px; }
+  .hero-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:40px; flex-wrap:wrap; margin-bottom:56px;}
+  .hero h1{
+    font-size:56px; line-height:1.05; max-width:16ch;
+  }
+  .hero h1 .hl{ color:var(--yellow); }
+  .hero-sub{ max-width:44ch; }
+  .hero-badges{ display:flex; gap:8px; flex-wrap:wrap; margin-top:22px; }
+  .badge{
+    font-family:var(--mono); font-size:11.5px; color:var(--teal);
+    border:1px solid rgba(52,199,181,0.35); background:rgba(52,199,181,0.08);
+    padding:5px 10px; border-radius:999px;
+  }
+  .hero-actions{ display:flex; gap:12px; margin-top:28px; }
+
+  /* Signature: mock report canvas with NL->DAX chat overlay */
+  .canvas-mock{
+    background:var(--surface);
+    border:1px solid var(--line-strong);
+    border-radius:14px;
+    padding:20px;
+    position:relative;
+    overflow:hidden;
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.6);
+  }
+  .canvas-mock-bar{ display:flex; align-items:center; gap:8px; margin-bottom:18px; }
+  .dot{ width:9px; height:9px; border-radius:50%; background:var(--line-strong); }
+  .canvas-mock-title{ font-family:var(--mono); font-size:11px; color:var(--muted-dim); margin-left:8px; }
+
+  .kpi-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:14px; }
+  .kpi{ background:var(--surface-alt); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .kpi .label{ font-family:var(--mono); font-size:10.5px; color:var(--muted-dim); text-transform:uppercase; letter-spacing:0.08em;}
+  .kpi .value{ font-family:var(--display); font-size:22px; margin-top:6px; }
+  .kpi .delta{ font-size:11.5px; margin-top:4px; }
+  .delta.up{ color:var(--teal); } .delta.down{ color:var(--coral); }
+
+  .chart-panel{ background:var(--surface-alt); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .chart-panel svg{ width:100%; height:120px; display:block; }
+
+  .chat-overlay{
+    background:var(--surface-alt); border:1px solid var(--line-strong); border-radius:10px;
+    padding:14px 16px;
+  }
+  .chat-row{ display:flex; gap:10px; margin-bottom:10px; align-items:flex-start; }
+  .chat-row:last-child{ margin-bottom:0; }
+  .chat-avatar{ width:22px; height:22px; border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-family:var(--mono); font-weight:600; }
+  .chat-avatar.user{ background:var(--surface-raised); color:var(--muted); }
+  .chat-avatar.ai{ background:var(--yellow); color:#0E1420; }
+  .chat-bubble{ font-size:13px; color:var(--text); }
+  .chat-bubble.dax{ font-family:var(--mono); font-size:12px; color:var(--teal); background:rgba(52,199,181,0.08); border:1px solid rgba(52,199,181,0.25); padding:8px 10px; border-radius:6px; display:inline-block; }
+
+  /* ---------- Feature grid ---------- */
+  .grid{ display:grid; gap:16px; margin-top:32px; }
+  .grid-3{ grid-template-columns:repeat(3,1fr); }
+  .grid-2{ grid-template-columns:repeat(2,1fr); }
+  .card{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:12px; padding:24px;
+    transition:border-color .15s ease, transform .15s ease;
+  }
+  .card:hover{ border-color:var(--line-strong); transform:translateY(-2px); }
+  .card .icon{
+    width:34px; height:34px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--surface-alt); border:1px solid var(--line);
+    margin-bottom:16px; font-size:16px;
+  }
+  .card p{ font-size:14px; }
+
+  /* ---------- Architecture diagram ---------- */
+  .arch-flow{
+    display:flex; align-items:stretch; gap:0; flex-wrap:wrap;
+    margin-top:36px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:28px;
+  }
+  .arch-node{
+    flex:1; min-width:150px; display:flex; flex-direction:column; gap:6px;
+    padding:16px; text-align:left;
+  }
+  .arch-node .tag{ font-family:var(--mono); font-size:10px; color:var(--muted-dim); text-transform:uppercase; letter-spacing:0.08em; }
+  .arch-node .title{ font-family:var(--display); font-size:14.5px; font-weight:600; }
+  .arch-node .desc{ font-size:12px; color:var(--muted); }
+  .arch-arrow{ display:flex; align-items:center; justify-content:center; color:var(--muted-dim); font-family:var(--mono); padding:0 4px; }
+
+  /* ---------- Tables ---------- */
+  table{ width:100%; border-collapse:collapse; margin-top:24px; font-size:13.5px; }
+  th, td{ text-align:left; padding:12px 14px; border-bottom:1px solid var(--line); }
+  th{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted-dim); font-weight:500; }
+  td{ color:var(--muted); }
+  td code, td .mono{ color:var(--teal); font-family:var(--mono); font-size:12.5px; }
+  tr:last-child td{ border-bottom:none; }
+
+  /* ---------- Code blocks ---------- */
+  pre{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; padding:18px 20px; overflow-x:auto;
+    margin-top:16px;
+  }
+  code{ font-family:var(--mono); font-size:12.8px; line-height:1.7; color:var(--text); }
+  .kw{ color:var(--yellow); }
+  .str{ color:var(--teal); }
+  .cmt{ color:var(--muted-dim); }
+  .fn{ color:#9FB6FF; }
+
+  .code-label{ display:flex; justify-content:space-between; align-items:center; margin-top:28px; margin-bottom:0; }
+  .code-label span{ font-family:var(--mono); font-size:11.5px; color:var(--muted-dim); }
+  .code-label:first-child{ margin-top:0; }
+
+  /* ---------- API endpoint cards ---------- */
+  .endpoint{ display:flex; gap:14px; padding:18px 0; border-bottom:1px solid var(--line); align-items:flex-start; }
+  .endpoint:last-child{ border-bottom:none; }
+  .method{
+    font-family:var(--mono); font-size:11px; font-weight:700; padding:4px 9px; border-radius:5px; flex-shrink:0; margin-top:2px;
+  }
+  .method.post{ background:rgba(242,200,17,0.12); color:var(--yellow); }
+  .method.get{ background:rgba(52,199,181,0.12); color:var(--teal); }
+  .endpoint .path{ font-family:var(--mono); font-size:14px; color:var(--text); }
+  .endpoint .desc{ font-size:13.5px; color:var(--muted); margin-top:4px; }
+
+  /* ---------- Screenshots (mock) ---------- */
+  .shot{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    overflow:hidden;
+  }
+  .shot-header{ padding:12px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+  .shot-header .name{ font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+  .shot-body{ padding:18px; }
+  .mini-bars{ display:flex; align-items:flex-end; gap:6px; height:80px; }
+  .mini-bars .bar{ flex:1; background:linear-gradient(180deg, var(--teal), rgba(52,199,181,0.15)); border-radius:3px 3px 0 0; }
+  .note{ font-size:12px; color:var(--muted-dim); margin-top:14px; font-style:italic; }
+
+  /* ---------- Steps ---------- */
+  .steps{ counter-reset:step; margin-top:28px; display:flex; flex-direction:column; gap:0; }
+  .step{ display:flex; gap:18px; padding:18px 0; border-bottom:1px solid var(--line); }
+  .step:last-child{ border-bottom:none; }
+  .step .num{
+    counter-increment:step; font-family:var(--mono); font-size:13px; color:var(--yellow);
+    width:26px; height:26px; border:1px solid rgba(242,200,17,0.35); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .step .num::before{ content: counter(step); }
+  .step h3{ font-size:15px; margin-bottom:4px; }
+  .step p{ font-size:13.5px; }
+
+  /* ---------- Future / list ---------- */
+  .future-list{ list-style:none; margin-top:28px; display:flex; flex-direction:column; gap:14px; }
+  .future-list li{ display:flex; gap:14px; align-items:baseline; }
+  .future-list .mark{ color:var(--coral); font-family:var(--mono); font-size:13px; }
+  .future-list .txt strong{ display:block; font-size:14.5px; margin-bottom:2px; }
+  .future-list .txt p{ font-size:13px; }
+
+  /* ---------- Author ---------- */
+  .author-card{
+    display:flex; gap:20px; align-items:center; margin-top:32px;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:28px;
+  }
+  .author-avatar{
+    width:64px; height:64px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg, var(--yellow), var(--teal));
+  }
+  .author-links{ display:flex; gap:10px; margin-top:12px; }
+  .author-links a{ font-family:var(--mono); font-size:12.5px; color:var(--teal); border:1px solid rgba(52,199,181,0.3); padding:6px 12px; border-radius:6px; }
+
+  footer{ padding:40px 64px; text-align:center; color:var(--muted-dim); font-size:12.5px; }
+
+  @media (max-width: 980px){
+    .shell{ grid-template-columns:1fr; }
+    .sidebar{ position:relative; height:auto; border-right:none; border-bottom:1px solid var(--line); }
+    section{ padding:64px 24px; }
+    .grid-3, .grid-2{ grid-template-columns:1fr; }
+    .hero h1{ font-size:38px; }
+    .kpi-row{ grid-template-columns:1fr; }
+    .arch-flow{ flex-direction:column; }
+    .arch-arrow{ transform:rotate(90deg); padding:6px 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <nav class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">PB</div>
+      <div>
+        AI POWER BI COPILOT
+        <small>data analyst, automated</small>
+      </div>
+    </div>
+
+    <div>
+      <div class="nav-group-label">Documentation</div>
+      <ul class="navlist" id="navlist">
+        <li><a href="#overview"><span class="idx">01</span>Overview</a></li>
+        <li><a href="#problem"><span class="idx">02</span>Problem Statement</a></li>
+        <li><a href="#features"><span class="idx">03</span>Features</a></li>
+        <li><a href="#architecture"><span class="idx">04</span>Architecture</a></li>
+        <li><a href="#techstack"><span class="idx">05</span>Tech Stack</a></li>
+        <li><a href="#dataset"><span class="idx">06</span>Dataset</a></li>
+        <li><a href="#pipeline"><span class="idx">07</span>Data Pipeline</a></li>
+        <li><a href="#ai-architecture"><span class="idx">08</span>AI Architecture</a></li>
+        <li><a href="#dashboard"><span class="idx">09</span>Power BI Dashboard</a></li>
+        <li><a href="#dax"><span class="idx">10</span>DAX Examples</a></li>
+        <li><a href="#api"><span class="idx">11</span>API Documentation</a></li>
+        <li><a href="#screenshots"><span class="idx">12</span>Screenshots</a></li>
+        <li><a href="#installation"><span class="idx">13</span>Installation</a></li>
+        <li><a href="#env"><span class="idx">14</span>Environment Variables</a></li>
+        <li><a href="#local"><span class="idx">15</span>Running Locally</a></li>
+        <li><a href="#docker"><span class="idx">16</span>Docker Setup</a></li>
+        <li><a href="#future"><span class="idx">17</span>Future Improvements</a></li>
+        <li><a href="#author"><span class="idx">18</span>Author</a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-cta">
+      <a class="btn btn-primary" href="#installation">Get Started</a>
+      <a class="btn btn-ghost" href="#api">View API Docs</a>
+    </div>
+  </nav>
+
+  <!-- ============ MAIN ============ -->
+  <main>
+
+    <!-- HERO / OVERVIEW -->
+    <section class="hero" id="overview">
+      <div class="eyebrow"><span class="num">01</span>Overview</div>
+      <div class="hero-top">
+        <div>
+          <h1>Ask your data a question. <span class="hl">Get DAX, insight, and a chart back.</span></h1>
+          <p class="hero-sub" style="margin-top:18px;">AI Power BI Copilot is a natural-language layer that sits on top of your Power BI semantic model. Analysts type a question the way they'd ask a colleague — the copilot grounds it in your real schema, writes the DAX, runs it, and explains what it found.</p>
+          <div class="hero-badges">
+            <span class="badge">Natural language → DAX</span>
+            <span class="badge">RAG over semantic model</span>
+            <span class="badge">Power BI REST + XMLA</span>
+            <span class="badge">Auto-narrated insights</span>
+          </div>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#installation">Install the copilot</a>
+            <a class="btn btn-ghost" href="#architecture">See how it works</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signature element: mock report canvas with chat -->
+      <div class="canvas-mock">
+        <div class="canvas-mock-bar">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="canvas-mock-title">executive-summary.pbix — report canvas</div>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi"><div class="label">Revenue MTD</div><div class="value">$482.6K</div><div class="delta up">▲ 12.4% vs last month</div></div>
+          <div class="kpi"><div class="label">Active Customers</div><div class="value">8,214</div><div class="delta up">▲ 3.1%</div></div>
+          <div class="kpi"><div class="label">Churn Risk</div><div class="value">96 accts</div><div class="delta down">▲ flagged by AI</div></div>
+        </div>
+
+        <div class="chart-panel">
+          <svg viewBox="0 0 600 120" preserveAspectRatio="none">
+            <polyline points="0,90 60,78 120,82 180,60 240,66 300,44 360,50 420,30 480,36 540,18 600,24" fill="none" stroke="#F2C811" stroke-width="2.5"/>
+            <polyline points="0,90 60,78 120,82 180,60 240,66 300,44 360,50 420,30 480,36 540,18 600,24 600,120 0,120" fill="url(#g)" stroke="none" opacity="0.5"/>
+            <defs>
+              <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#F2C811" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#F2C811" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <div class="chat-overlay">
+          <div class="chat-row">
+            <div class="chat-avatar user">DA</div>
+            <div class="chat-bubble">"Why did churn risk jump in the northeast region this week?"</div>
+          </div>
+          <div class="chat-row">
+            <div class="chat-avatar ai">AI</div>
+            <div>
+              <div class="chat-bubble dax">EVALUATE SUMMARIZECOLUMNS(Region[Name], "ChurnRisk", [ChurnRiskScore])</div>
+              <div class="chat-bubble" style="display:block; margin-top:6px;">96 accounts crossed the risk threshold, concentrated in Boston and Hartford — mostly customers whose support tickets rose while order frequency dropped.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROBLEM STATEMENT -->
+    <section id="problem">
+      <div class="eyebrow"><span class="num">02</span>Problem Statement</div>
+      <h2>Every new metric still waits on an analyst.</h2>
+      <p class="lede">Power BI is powerful, but the distance between "I have a business question" and "I have an answer" runs through DAX syntax, model relationships, and someone's calendar.</p>
+      <div class="grid grid-3">
+        <div class="card">
+          <div class="icon">⏳</div>
+          <h3>Requests queue up</h3>
+          <p>Stakeholders file a ticket for a metric that should take thirty seconds to check, and it sits behind ten other requests.</p>
+        </div>
+        <div class="card">
+          <div class="icon">📐</div>
+          <h3>DAX has a steep curve</h3>
+          <p>Row context, filter context, and CALCULATE semantics take months to internalize — most teams have one or two people who can write it fluently.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🕳️</div>
+          <h3>Insights go undiscovered</h3>
+          <p>Nobody is watching every measure every day, so anomalies and slow trend shifts surface late, if at all.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features">
+      <div class="eyebrow"><span class="num">03</span>Features</div>
+      <h2>What the copilot actually does</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <div class="icon">💬</div>
+          <h3>Natural language to DAX</h3>
+          <p>Converts a plain-English question into a validated DAX query, scoped to the tables and relationships that actually exist in your model.</p>
+        </div>
+        <div class="card">
+          <div class="icon">📊</div>
+          <h3>Auto-insights engine</h3>
+          <p>Runs statistical checks against key measures on a schedule and surfaces trends, outliers, and week-over-week shifts before anyone asks.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🧩</div>
+          <h3>Embedded chat panel</h3>
+          <p>Ships as a Power BI custom visual, so the copilot lives inside the report canvas next to the visuals it's explaining.</p>
+        </div>
+        <div class="card">
+          <div class="icon">📝</div>
+          <h3>Narrative report generation</h3>
+          <p>Turns a page of visuals into a written executive summary — three paragraphs, no chart-reading required.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🚨</div>
+          <h3>Anomaly alerts</h3>
+          <p>Watches measures for statistically significant deviations and pushes a Teams or email alert with the likely cause.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🔒</div>
+          <h3>Row-level security aware</h3>
+          <p>Every generated query executes under the requesting user's Power BI identity, so RLS rules apply exactly as they do in the report.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section id="architecture">
+      <div class="eyebrow"><span class="num">04</span>Architecture</div>
+      <h2>How a question becomes an answer</h2>
+      <p>Five stages, no step skipped: the model never sees raw data it isn't scoped to, and every query it writes is validated before it runs.</p>
+      <div class="arch-flow">
+        <div class="arch-node">
+          <span class="tag">Client</span>
+          <span class="title">Chat UI / Embedded Visual</span>
+          <span class="desc">React panel inside Power BI or the standalone web app</span>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">
+          <span class="tag">Backend</span>
+          <span class="title">FastAPI Gateway</span>
+          <span class="desc">Auth, rate limiting, request routing</span>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">
+          <span class="tag">Grounding</span>
+          <span class="title">Semantic Retrieval (RAG)</span>
+          <span class="desc">pgvector lookup over table/column/measure metadata</span>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">
+          <span class="tag">Reasoning</span>
+          <span class="title">LLM Query Planner</span>
+          <span class="desc">Drafts and self-checks the DAX/SQL</span>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">
+          <span class="tag">Execution</span>
+          <span class="title">Power BI XMLA / REST</span>
+          <span class="desc">Runs under the caller's identity, returns rows</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TECH STACK -->
+    <section id="techstack">
+      <div class="eyebrow"><span class="num">05</span>Tech Stack</div>
+      <h2>Built on</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>Frontend</h3>
+          <p>React + TypeScript, Tailwind CSS, Power BI Custom Visuals SDK for the embedded chat panel.</p>
+        </div>
+        <div class="card">
+          <h3>Backend</h3>
+          <p>FastAPI (Python 3.11), Pydantic for schema validation, Celery for scheduled insight jobs.</p>
+        </div>
+        <div class="card">
+          <h3>AI / LLM</h3>
+          <p>Claude API for query planning and narrative generation, LangChain for orchestration, pgvector for semantic model embeddings.</p>
+        </div>
+        <div class="card">
+          <h3>Data & BI</h3>
+          <p>PostgreSQL warehouse, Power BI Desktop + Power BI REST API + XMLA endpoint, Apache Airflow for ETL scheduling.</p>
+        </div>
+        <div class="card">
+          <h3>Infrastructure</h3>
+          <p>Docker + Docker Compose for local dev, Azure App Service for hosting, GitHub Actions for CI/CD.</p>
+        </div>
+        <div class="card">
+          <h3>Auth</h3>
+          <p>Azure AD (Entra ID) for user identity, passed through to Power BI so row-level security is always respected.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- DATASET -->
+    <section id="dataset">
+      <div class="eyebrow"><span class="num">06</span>Dataset</div>
+      <h2>Demo dataset: Global Retail Sales</h2>
+      <p class="lede">The repo ships with a synthetic retail dataset so the copilot works out of the box, before you point it at your own warehouse.</p>
+      <table>
+        <thead><tr><th>Table</th><th>Rows</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="mono">fact_orders</span></td><td>~250,000</td><td>Line-item order data: date, product, customer, quantity, revenue</td></tr>
+          <tr><td><span class="mono">dim_customers</span></td><td>18,400</td><td>Customer profile, segment, signup date, region</td></tr>
+          <tr><td><span class="mono">dim_products</span></td><td>3,200</td><td>Category, subcategory, unit cost, unit price</td></tr>
+          <tr><td><span class="mono">dim_date</span></td><td>2,192</td><td>Calendar table, 2020–2025, fiscal and standard periods</td></tr>
+          <tr><td><span class="mono">dim_region</span></td><td>52</td><td>Store and territory hierarchy</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- DATA PIPELINE -->
+    <section id="pipeline">
+      <div class="eyebrow"><span class="num">07</span>Data Pipeline</div>
+      <h2>From source to semantic model</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="num"></div>
+          <div><h3>Extract</h3><p>Pulls from source CSVs, an operational Postgres replica, or a REST API, depending on the environment.</p></div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div><h3>Clean & transform</h3><p>Pandas jobs handle type coercion, deduplication, currency normalization, and slowly-changing-dimension logic for customers.</p></div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div><h3>Load</h3><p>Writes to a star-schema warehouse in PostgreSQL — fact and dimension tables, indexed on the columns Power BI will filter on most.</p></div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div><h3>Model</h3><p>Power BI connects via DirectQuery for real-time tables and Import mode for slower-changing dimensions.</p></div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div><h3>Schedule</h3><p>An Airflow DAG runs the pipeline nightly and triggers a Power BI dataset refresh via the REST API on completion.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI ARCHITECTURE -->
+    <section id="ai-architecture">
+      <div class="eyebrow"><span class="num">08</span>AI Architecture</div>
+      <h2>How the copilot stays grounded</h2>
+      <p class="lede">The LLM never freelances a schema — it only ever writes queries against tables, columns, and measures it retrieved from the real semantic model.</p>
+      <div class="code-label"><span>query_pipeline.py</span></div>
+      <pre><code><span class="cmt"># 1. Embed the incoming question</span>
+question_vec = embed(user_question)
+
+<span class="cmt"># 2. Retrieve relevant schema context (RAG over pgvector)</span>
+schema_context = vector_store.similarity_search(
+    question_vec, k=<span class="str">8</span>, namespace=<span class="str">"semantic_model"</span>
+)
+
+<span class="cmt"># 3. Plan the query with schema grounding</span>
+plan = llm.generate(
+    system=<span class="fn">build_system_prompt</span>(schema_context),
+    user=user_question,
+)
+
+<span class="cmt"># 4. Validate before execution — reject unknown tables/columns</span>
+<span class="kw">if not</span> <span class="fn">validate_against_schema</span>(plan.dax, schema_context):
+    <span class="kw">raise</span> UngroundedQueryError()
+
+<span class="cmt"># 5. Execute under the caller's Power BI identity (RLS applies)</span>
+result = powerbi_client.<span class="fn">execute_query</span>(plan.dax, user_token=ctx.token)
+
+<span class="cmt"># 6. Narrate the result in plain language</span>
+narrative = llm.<span class="fn">summarize</span>(result, question=user_question)</code></pre>
+    </section>
+
+    <!-- POWER BI DASHBOARD -->
+    <section id="dashboard">
+      <div class="eyebrow"><span class="num">09</span>Power BI Dashboard</div>
+      <h2>Five report pages, one AI feed</h2>
+      <div class="grid grid-2">
+        <div class="card"><h3>Executive Summary</h3><p>Revenue, margin, and customer KPIs against target, with the AI narrative panel pinned to the top.</p></div>
+        <div class="card"><h3>Sales Trends</h3><p>Time-series breakdown by category and channel, with AI-flagged inflection points overlaid on the trend line.</p></div>
+        <div class="card"><h3>Customer Segmentation</h3><p>RFM-based segments, cohort retention curves, and churn-risk scoring per account.</p></div>
+        <div class="card"><h3>Regional Performance</h3><p>Territory map with drill-through to store-level performance and AI commentary per region.</p></div>
+        <div class="card"><h3>AI Insights Feed</h3><p>A running, timestamped log of everything the anomaly engine has caught, with links back to the relevant visual.</p></div>
+        <div class="card"><h3>Ask the Copilot</h3><p>An embedded custom visual — the chat panel shown in the hero — available on every page.</p></div>
+      </div>
+    </section>
+
+    <!-- DAX EXAMPLES -->
+    <section id="dax">
+      <div class="eyebrow"><span class="num">10</span>DAX Examples</div>
+      <h2>What the copilot generates</h2>
+
+      <div class="code-label"><span>Total Sales YTD</span></div>
+      <pre><code>Total Sales YTD =
+<span class="kw">CALCULATE</span>(
+    <span class="kw">SUM</span>(fact_orders[Revenue]),
+    <span class="kw">DATESYTD</span>(dim_date[Date])
+)</code></pre>
+
+      <div class="code-label"><span>Sales Growth % (vs prior month)</span></div>
+      <pre><code>Sales Growth % =
+<span class="kw">VAR</span> CurrentMonth = [Total Sales YTD]
+<span class="kw">VAR</span> PriorMonth =
+    <span class="kw">CALCULATE</span>([Total Sales YTD], <span class="kw">DATEADD</span>(dim_date[Date], -1, MONTH))
+<span class="kw">RETURN</span>
+    <span class="kw">DIVIDE</span>(CurrentMonth - PriorMonth, PriorMonth)</code></pre>
+
+      <div class="code-label"><span>Top 10 Customers by Revenue</span></div>
+      <pre><code>Top Customers =
+<span class="kw">TOPN</span>(
+    <span class="str">10</span>,
+    <span class="kw">SUMMARIZE</span>(dim_customers, dim_customers[CustomerName], <span class="str">"Rev"</span>, [Total Sales YTD]),
+    [Rev], DESC
+)</code></pre>
+
+      <div class="code-label"><span>Churn Risk Score</span></div>
+      <pre><code>Churn Risk Score =
+<span class="kw">VAR</span> DaysSinceLastOrder =
+    <span class="kw">DATEDIFF</span>(<span class="kw">MAX</span>(fact_orders[OrderDate]), TODAY(), DAY)
+<span class="kw">RETURN</span>
+    <span class="kw">IF</span>(DaysSinceLastOrder > <span class="str">90</span>, <span class="str">"High"</span>,
+        <span class="kw">IF</span>(DaysSinceLastOrder > <span class="str">45</span>, <span class="str">"Medium"</span>, <span class="str">"Low"</span>))</code></pre>
+    </section>
+
+    <!-- API DOCUMENTATION -->
+    <section id="api">
+      <div class="eyebrow"><span class="num">11</span>API Documentation</div>
+      <h2>Backend endpoints</h2>
+
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <div>
+          <div class="path">/api/query</div>
+          <div class="desc">Accepts a natural-language question, returns the generated DAX, the result rows, and a plain-language explanation.</div>
+        </div>
+      </div>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <div>
+          <div class="path">/api/insights/run</div>
+          <div class="desc">Triggers an on-demand pass of the anomaly-detection engine against a given dataset.</div>
+        </div>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <div>
+          <div class="path">/api/insights/feed</div>
+          <div class="desc">Returns the paginated, timestamped feed of AI-detected insights for a workspace.</div>
+        </div>
+      </div>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <div>
+          <div class="path">/api/refresh</div>
+          <div class="desc">Kicks off a Power BI dataset refresh via the REST API, typically called by the Airflow DAG on pipeline completion.</div>
+        </div>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <div>
+          <div class="path">/api/health</div>
+          <div class="desc">Liveness check — verifies the LLM provider, vector store, and Power BI connection are all reachable.</div>
+        </div>
+      </div>
+
+      <div class="code-label"><span>Example — POST /api/query</span></div>
+      <pre><code>{
+  <span class="str">"question"</span>: <span class="str">"What were our top 3 regions by revenue last quarter?"</span>,
+  <span class="str">"dataset_id"</span>: <span class="str">"retail-sales-prod"</span>
+}
+
+<span class="cmt">// 200 OK</span>
+{
+  <span class="str">"dax"</span>: <span class="str">"EVALUATE TOPN(3, SUMMARIZE(dim_region, ...))"</span>,
+  <span class="str">"rows"</span>: [
+    { <span class="str">"region"</span>: <span class="str">"Northeast"</span>, <span class="str">"revenue"</span>: <span class="str">1284000</span> },
+    { <span class="str">"region"</span>: <span class="str">"Midwest"</span>, <span class="str">"revenue"</span>: <span class="str">1091500</span> },
+    { <span class="str">"region"</span>: <span class="str">"West"</span>, <span class="str">"revenue"</span>: <span class="str">987200</span> }
+  ],
+  <span class="str">"narrative"</span>: <span class="str">"Northeast led last quarter, up 8% on strong holiday demand..."</span>
+}</code></pre>
+    </section>
+
+    <!-- SCREENSHOTS -->
+    <section id="screenshots">
+      <div class="eyebrow"><span class="num">12</span>Screenshots</div>
+      <h2>Report previews</h2>
+      <div class="grid grid-2">
+        <div class="shot">
+          <div class="shot-header"><span class="name">executive-summary.png</span><span class="badge">mock</span></div>
+          <div class="shot-body">
+            <div class="mini-bars">
+              <div class="bar" style="height:40%"></div><div class="bar" style="height:65%"></div><div class="bar" style="height:50%"></div>
+              <div class="bar" style="height:80%"></div><div class="bar" style="height:70%"></div><div class="bar" style="height:95%"></div>
+              <div class="bar" style="height:60%"></div><div class="bar" style="height:75%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="shot">
+          <div class="shot-header"><span class="name">ai-insights-feed.png</span><span class="badge">mock</span></div>
+          <div class="shot-body">
+            <div class="chat-overlay" style="margin:0;">
+              <div class="chat-row"><div class="chat-avatar ai">AI</div><div class="chat-bubble">Revenue in Store #114 dropped 22% week-over-week — likely a stockout on the top SKU.</div></div>
+              <div class="chat-row"><div class="chat-avatar ai">AI</div><div class="chat-bubble">Customer segment "Loyal Regulars" grew 4.1%, the fastest of any segment this month.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note">Mockups shown in place of live screenshots — drop PNGs into /docs/screenshots and swap the .shot blocks above for &lt;img&gt; tags.</p>
+    </section>
+
+    <!-- INSTALLATION -->
+    <section id="installation">
+      <div class="eyebrow"><span class="num">13</span>Installation</div>
+      <h2>Get it running</h2>
+      <div class="steps">
+        <div class="step"><div class="num"></div><div><h3>Clone the repository</h3><p>git clone the project and move into the directory.</p></div></div>
+        <div class="step"><div class="num"></div><div><h3>Create a virtual environment</h3><p>Python 3.11+ recommended for the backend.</p></div></div>
+        <div class="step"><div class="num"></div><div><h3>Install backend dependencies</h3><p>pip install everything listed in requirements.txt.</p></div></div>
+        <div class="step"><div class="num"></div><div><h3>Install frontend dependencies</h3><p>npm install inside the /web directory.</p></div></div>
+        <div class="step"><div class="num"></div><div><h3>Configure environment variables</h3><p>Copy .env.example to .env and fill in your keys — see the section below.</p></div></div>
+      </div>
+      <div class="code-label"><span>terminal</span></div>
+      <pre><code>git clone https://github.com/your-org/ai-powerbi-copilot.git
+<span class="kw">cd</span> ai-powerbi-copilot
+
+python -m venv .venv <span class="cmt">&& source .venv/bin/activate</span>
+pip install -r requirements.txt
+
+<span class="kw">cd</span> web <span class="cmt">&& npm install && cd ..</span>
+
+cp .env.example .env</code></pre>
+    </section>
+
+    <!-- ENVIRONMENT VARIABLES -->
+    <section id="env">
+      <div class="eyebrow"><span class="num">14</span>Environment Variables</div>
+      <h2>.env configuration</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Required</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Yes</td><td>API key used for query planning and narrative generation</td></tr>
+          <tr><td><code>POWER_BI_CLIENT_ID</code></td><td>Yes</td><td>Azure AD app registration client ID</td></tr>
+          <tr><td><code>POWER_BI_CLIENT_SECRET</code></td><td>Yes</td><td>Azure AD app registration secret</td></tr>
+          <tr><td><code>POWER_BI_TENANT_ID</code></td><td>Yes</td><td>Azure AD tenant hosting the Power BI workspace</td></tr>
+          <tr><td><code>POWER_BI_WORKSPACE_ID</code></td><td>Yes</td><td>Target workspace for report and dataset calls</td></tr>
+          <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>PostgreSQL connection string for the warehouse</td></tr>
+          <tr><td><code>VECTOR_DB_URL</code></td><td>Yes</td><td>pgvector connection string for schema embeddings</td></tr>
+          <tr><td><code>AIRFLOW_WEBSERVER_URL</code></td><td>No</td><td>Only needed if triggering pipeline runs from the app</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- RUNNING LOCALLY -->
+    <section id="local">
+      <div class="eyebrow"><span class="num">15</span>Running Locally</div>
+      <h2>Start both services</h2>
+      <div class="code-label"><span>backend</span></div>
+      <pre><code>uvicorn app.main:app --reload --port <span class="str">8000</span></code></pre>
+      <div class="code-label"><span>frontend</span></div>
+      <pre><code><span class="kw">cd</span> web
+npm run dev</code></pre>
+      <p style="margin-top:16px;">The chat UI is available at <span class="mono">localhost:5173</span>, and the API docs (Swagger) at <span class="mono">localhost:8000/docs</span>.</p>
+    </section>
+
+    <!-- DOCKER SETUP -->
+    <section id="docker">
+      <div class="eyebrow"><span class="num">16</span>Docker Setup</div>
+      <h2>One command, full stack</h2>
+      <div class="code-label"><span>docker-compose.yml</span></div>
+      <pre><code><span class="kw">services</span>:
+  api:
+    build: ./app
+    ports: [<span class="str">"8000:8000"</span>]
+    env_file: .env
+    depends_on: [db, vector-db]
+
+  web:
+    build: ./web
+    ports: [<span class="str">"5173:5173"</span>]
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: copilot
+    volumes: [<span class="str">"pgdata:/var/lib/postgresql/data"</span>]
+
+  vector-db:
+    image: ankane/pgvector
+    ports: [<span class="str">"5433:5432"</span>]
+
+volumes:
+  pgdata:</code></pre>
+      <div class="code-label"><span>terminal</span></div>
+      <pre><code>docker compose up --build</code></pre>
+    </section>
+
+    <!-- FUTURE IMPROVEMENTS -->
+    <section id="future">
+      <div class="eyebrow"><span class="num">17</span>Future Improvements</div>
+      <h2>What's next</h2>
+      <ul class="future-list">
+        <li>
+          <span class="mark">→</span>
+          <div class="txt"><strong>Voice queries</strong><p>Ask the copilot out loud during a live review meeting instead of typing.</p></div>
+        </li>
+        <li>
+          <span class="mark">→</span>
+          <div class="txt"><strong>Auto-generated report pages</strong><p>Let the copilot draft an entire new Power BI page from a description, not just answer questions about existing ones.</p></div>
+        </li>
+        <li>
+          <span class="mark">→</span>
+          <div class="txt"><strong>Multi-modal chart understanding</strong><p>Upload a screenshot of a chart from anywhere and have the copilot reconstruct the underlying query.</p></div>
+        </li>
+        <li>
+          <span class="mark">→</span>
+          <div class="txt"><strong>Fine-tuned domain model</strong><p>A smaller, cheaper model fine-tuned on your org's actual measure names and query history.</p></div>
+        </li>
+        <li>
+          <span class="mark">→</span>
+          <div class="txt"><strong>Microsoft Teams integration</strong><p>Bring the same Q&A and anomaly alerts into Teams channels, not just the Power BI canvas.</p></div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- AUTHOR -->
+    <section id="author">
+      <div class="eyebrow"><span class="num">18</span>Author</div>
+      <h2>Built by</h2>
+      <div class="author-card">
+        <div class="author-avatar"></div>
+        <div>
+          <h3 style="margin-bottom:4px;">Subhadip Manna</h3>
+          <p style="font-size:13.5px;">Data Analyst & AI Engineer.</p>
+          <div class="author-links">
+            <a href="https://github.com/manna2006" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://www.linkedin.com/in/subhadip-manna-3786a429a" target="_blank" rel="noopener">LinkedIn</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>AI Power BI Copilot — documentation site. Replace mock screenshots, links, and author details before publishing.</footer>
+
+  </main>
+</div>
+
+<script>
+  // Scroll-spy for sidebar nav
+  const sections = document.querySelectorAll('main section[id]');
+  const navLinks = document.querySelectorAll('#navlist a');
+
+  const setActive = (id) => {
+    navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+  };
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) setActive(entry.target.id);
+    });
+  }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+
+  sections.forEach(s => observer.observe(s));
+  setActive('overview');
+</script>
+
+</body>
+</html>
